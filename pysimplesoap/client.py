@@ -36,7 +36,7 @@ from .helpers import fetch, sort_dict, make_key, process_element, \
                      postprocess_element, get_message, preprocess_schema, \
                      get_local_name, get_namespace_prefix, TYPE_MAP, urlsplit
 from .wsse import UsernameToken
-
+from .wsse import BinaryTokenSignature
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +81,7 @@ class SoapClient(object):
                  http_headers=None, trace=False,
                  username=None, password=None,
                  key_file=None, plugins=None, strict=True,
+                 insecure_response=False
                  ):
         """
         :param http_headers: Additional HTTP Headers; example: {'Host': 'ipsec.example.com'}
@@ -95,6 +96,7 @@ class SoapClient(object):
         self.http_headers = http_headers or {}
         self.plugins = plugins or []
         self.strict = strict
+        self.insecure_response = insecure_response
         # extract the base directory / url for wsdl relative imports:
         if wsdl and wsdl_basedir == '':
             # parse the wsdl url, strip the scheme and filename
@@ -278,9 +280,9 @@ class SoapClient(object):
 
         # do post-processing using plugins (i.e. WSSE signature verification)
         for plugin in self.plugins:
-            plugin.postprocess(self, response, method, args, kwargs,
-                                     self.__headers, soap_uri)
-
+            if self.insecure_response:
+                if isinstance(plugin, BinaryTokenSignature):
+                    continue
         return response
 
     def send(self, method, xml):
@@ -333,9 +335,7 @@ class SoapClient(object):
                     if port['soap_ver'] == soap_ver:
                         self.service_port = service_name, port_name
                         break
-                else:
-                    raise RuntimeError('Cannot determine service in WSDL: '
-                                       'SOAP version: %s' % soap_ver)
+
         else:
             port = self.services[self.service_port[0]]['ports'][self.service_port[1]]
         if not self.location:
